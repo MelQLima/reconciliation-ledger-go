@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: go mod tidy
+        run: go mod tidy
+      - name: Upload module files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-modules
+          path: |
+            go.mod
+            go.sum
+      - name: Check go.mod/go.sum are tidy
+        run: git diff --exit-code go.mod go.sum
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Unit tests (race detector)
+        run: go test -race -coverprofile=coverage.out ./...
+      - name: Integration tests (Testcontainers + PostgreSQL)
+        run: go test -race -tags=integration ./internal/store/...
+      - name: Lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.1
+      - name: Docker build
+        run: docker build -t conciliacao-ledger-go .
